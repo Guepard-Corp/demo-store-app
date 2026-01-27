@@ -1,0 +1,57 @@
+name: Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+env:
+  GUEPARD_TOKEN: ${{ secrets.GUEPARD_TOKEN }}
+
+jobs:
+  preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set PR ID
+        run: echo "PR_ID=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+
+      - name: Clone database
+        run: |
+          guepard db clone \
+            --source prod-db \
+            --target preview-db-pr-${PR_ID}
+
+      - name: Apply migrations
+        run: |
+          guepard db migrate preview-db-pr-${PR_ID} \
+            --migrations ./migrations
+
+      - name: Schema compatibility check
+        run: |
+          guepard db diff prod-db preview-db-pr-${PR_ID} \
+            --fail-on-breaking
+
+      - name: Deploy preview API
+        run: |
+          ./deploy-api.sh preview-db-pr-${PR_ID}
+
+      - name: API tests
+        run: npm run test:api
+
+      - name: Deploy preview frontend
+        run: ./deploy-frontend.sh ${PR_ID}
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Remove preview DB
+        run: |
+          guepard db drop preview-db-pr-${{ github.event.pull_request.number }}
