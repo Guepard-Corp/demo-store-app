@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "*"
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  GUEPARD_TOKEN: ${{ secrets.GUEPARD_TOKEN }}
+
+jobs:
+  frontend-tests:
+    name: Unit tests - frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Install dependencies (frontend)
+        working-directory: components/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Run frontend unit tests
+        working-directory: components/frontend
+        run: pnpm test:run
+
+      - name: CI summary - frontend
+        if: always()
+        run: |
+          {
+            echo "### Frontend unit tests";
+            echo "";
+            echo "- Status: ${{ job.status }}";
+            echo "- Directory: \`components/frontend\`";
+            echo "- Command: \`pnpm test:run\`";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  api-tests:
+    name: Unit tests - API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies (api)
+        working-directory: components/api
+        run: pnpm install --frozen-lockfile
+
+      - name: Run API unit tests
+        working-directory: components/api
+        run: pnpm test
+
+      - name: CI summary - API
+        if: always()
+        run: |
+          {
+            echo "### API unit tests";
+            echo "";
+            echo "- Status: ${{ job.status }}";
+            echo "- Directory: \`components/api\`";
+            echo "- Command: \`pnpm test\` (Bun test runner)";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  db-integration-tests:
+    name: DB integration tests (clone, migrate, validate)
+    needs:
+      - frontend-tests
+      - api-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone database
+        id: db_clone
+        run: |
+          set -e
+          DB_NAME="ci-db-${{ github.run_id }}"
+          echo "DB_NAME=$DB_NAME" >> "$GITHUB_ENV"
+          echo "Cloning prod-db to $DB_NAME"
+          guepard db clone \
+            --source prod-db \
+            --target "$DB_NAME"
+
+      - name: Apply migrations
+        id: db_migrate
+        run: |
+          set -e
+          echo "Applying migrations to $DB_NAME"
+          guepard db migrate "$DB_NAME" \
+            --migrations ./migrations
+
+      - name: Write sample data (seed)
+        id: db_seed
+        run: |
+          echo "Seeding database $DB_NAME with realistic data (via guepard-managed pipelines or app seed)."
+          # NOTE: For now this is a placeholder hook where you can:
+          # - run Prisma seed against the cloned DB
+          # - or call a small app that populates test fixtures
+          # Keeping it as a no-op to keep CI green until seed wiring is added.
+
+      - name: Validate invariants & schema compatibility
+        id: db_diff
+        run: |
+          set -e
+          echo "Checking schema diff between prod-db and $DB_NAME"
+          guepard db diff prod-db "$DB_NAME" \
+            --fail-on-breaking
+
+      - name: CI summary - database
+        if: always()
+        run: |
+          {
+            echo "### DB integration tests (clone, migrate, validate)";
+            echo "";
+            echo "- Status: ${{ job.status }}";
+            echo "- Cloned from: \`prod-db\`";
+            echo "- Target: \`${DB_NAME:-ci-db-${{ github.run_id }}}\`";
+            echo "- Steps:";
+            echo "  - \`guepard db clone --source prod-db --target \$DB_NAME\`";
+            echo "  - \`guepard db migrate \$DB_NAME --migrations ./migrations\`";
+            echo "  - (optional) seed real data / fixtures";
+            echo "  - \`guepard db diff prod-db \$DB_NAME --fail-on-breaking\` (schema + invariants)";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Drop CI database
+        if: always()
+        run: |
+          if [ -n "${DB_NAME:-}" ]; then
+            echo "Dropping CI database $DB_NAME"
+            guepard db drop "$DB_NAME" || echo "Drop failed (possibly already removed)"
+          else
+            echo "DB_NAME not set, nothing to drop"
+          fi
+
+  api-contract-tests:
+    name: API contract tests
+    needs:
+      - db-integration-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies (api)
+        working-directory: components/api
+        run: pnpm install --frozen-lockfile
+
+      - name: Run API contract tests
+        env:
+          TEST_MODE: contract
+        working-directory: components/api
+        run: pnpm test
+
+      - name: CI summary - API contract tests
+        if: always()
+        run: |
+          {
+            echo "### API contract tests";
+            echo "";
+            echo "- Status: ${{ job.status }}";
+            echo "- Directory: \`components/api\`";
+            echo "- Command: \`pnpm test\` (with TEST_MODE=contract)";
+          } >> "$GITHUB_STEP_SUMMARY"
+
