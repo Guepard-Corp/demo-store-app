@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "e2e": "cd e2e && pnpm install && pnpm exec playwright test"
+  }
+}
