@@ -181,7 +181,12 @@ jobs:
             --branch-id "$BRANCH_ID" \
             --json || true)
           echo "$COMMIT_JSON" | jq '.' > /tmp/commit.json || true
-          SNAPSHOT_ID=$(echo "$COMMIT_JSON" | jq -r '.snapshot_id // empty')
+          # Handle both array and object responses
+          if echo "$COMMIT_JSON" | jq -e 'type == "array"' > /dev/null 2>&1; then
+            SNAPSHOT_ID=$(echo "$COMMIT_JSON" | jq -r '.[0].snapshot_id // .[0].id // empty')
+          else
+            SNAPSHOT_ID=$(echo "$COMMIT_JSON" | jq -r '.snapshot_id // .id // empty')
+          fi
           if [ -z "$SNAPSHOT_ID" ] || [ "$SNAPSHOT_ID" = "null" ]; then
             echo "Failed to create snapshot. Response:"
             echo "$COMMIT_JSON" | jq '.' || echo "$COMMIT_JSON"
