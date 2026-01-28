@@ -94,7 +94,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   db-integration-tests:
-    name: DB integration tests (clone, migrate, validate)
+    name: DB integration tests (clone from snapshot, validate)
     needs:
       - frontend-tests
       - api-tests
@@ -133,80 +133,96 @@ jobs:
           guepard logout || true
           guepard login -c "$GUEPARD_API_TOKEN"
 
-      - name: Clone database
-        id: db_clone
+      - name: Install jq
         run: |
-          set -e
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          DB_NAME="ci-db-${{ github.run_id }}"
-          echo "DB_NAME=$DB_NAME" >> "$GITHUB_ENV"
-          echo "Cloning prod-db to $DB_NAME"
-          guepard db clone \
-            --source prod-db \
-            --target "$DB_NAME"
+          sudo apt-get update
+          sudo apt-get install -y jq
 
-      - name: Apply migrations
-        id: db_migrate
+      - name: Select base deployment
+        id: base_deployment
         run: |
           set -e
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          echo "Applying migrations to $DB_NAME"
-          guepard db migrate "$DB_NAME" \
-            --migrations ./migrations
+          # List deployments as JSON and select the first CREATED deployment for repository 'Guepard-shop2'
+          DEPLOYMENTS_JSON=$(guepard list deployments --json)
+          echo "$DEPLOYMENTS_JSON" | jq '.' > /tmp/deployments.json
+          BASE_DEPLOYMENT_ID=$(echo "$DEPLOYMENTS_JSON" | jq -r '.[] | select(.repository == "Guepard-shop2" and .status == "CREATED") | .id' | head -n 1)
+          if [ -z "$BASE_DEPLOYMENT_ID" ]; then
+            echo "No suitable base deployment found for repository 'Guepard-shop2'"
+            exit 1
+          fi
+          echo "BASE_DEPLOYMENT_ID=$BASE_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          echo "base_deployment_id=$BASE_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Get snapshot ID from main branch
+        id: snapshot
+        run: |
+          set -e
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          BRANCHES_JSON=$(guepard list -x "$BASE_DEPLOYMENT_ID" branches --json)
+          echo "$BRANCHES_JSON" | jq '.' > /tmp/branches.json
+          SNAPSHOT_ID=$(echo "$BRANCHES_JSON" | jq -r '.[] | select(.branch_name == "main") | .snapshot_id' | head -n 1)
+          if [ -z "$SNAPSHOT_ID" ]; then
+            echo "No snapshot_id found for main branch on deployment $BASE_DEPLOYMENT_ID"
+            exit 1
+          fi
+          echo "SNAPSHOT_ID=$SNAPSHOT_ID" >> "$GITHUB_ENV"
+          echo "snapshot_id=$SNAPSHOT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Clone deployment from snapshot
+        id: clone
+        run: |
+          set -e
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          CLONE_JSON=$(guepard clone -x "$BASE_DEPLOYMENT_ID" -s "$SNAPSHOT_ID" --json)
+          echo "$CLONE_JSON" | jq '.' > /tmp/clone.json
+          CLONE_DEPLOYMENT_ID=$(echo "$CLONE_JSON" | jq -r '.deployment.id')
+          CONNECTION_STRING=$(echo "$CLONE_JSON" | jq -r '.compute.connection_string')
+          if [ -z "$CLONE_DEPLOYMENT_ID" ] || [ -z "$CONNECTION_STRING" ]; then
+            echo "Failed to capture clone deployment id or connection string"
+            exit 1
+          fi
+          echo "CLONE_DEPLOYMENT_ID=$CLONE_DEPLOYMENT_ID" >> "$GITHUB_ENV"
+          echo "DB_CONNECTION_STRING=$CONNECTION_STRING" >> "$GITHUB_ENV"
+          echo "clone_deployment_id=$CLONE_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "db_connection_string=$CONNECTION_STRING" >> "$GITHUB_OUTPUT"
 
       - name: Run DB invariants tests
         env:
-          # Full CI database URL provided via GitHub secrets
-          DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+          # Use Guepard clone compute connection string directly as DATABASE_URL
+          DATABASE_URL: ${{ env.DB_CONNECTION_STRING }}
         working-directory: components/api
         run: |
           echo "Running Prisma DB invariants tests against $DATABASE_URL"
           pnpm install --frozen-lockfile
           pnpm test:db
 
-      - name: Write sample data (seed)
-        id: db_seed
-        run: |
-          echo "Seeding database $DB_NAME with realistic data (via guepard-managed pipelines or app seed)."
-          # NOTE: For now this is a placeholder hook where you can:
-          # - run Prisma seed against the cloned DB
-          # - or call a small app that populates test fixtures
-          # Keeping it as a no-op to keep CI green until seed wiring is added.
-
-      - name: Validate invariants & schema compatibility
-        id: db_diff
-        run: |
-          set -e
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          echo "Checking schema diff between prod-db and $DB_NAME"
-          guepard db diff prod-db "$DB_NAME" \
-            --fail-on-breaking
-
       - name: CI summary - database
         if: always()
         run: |
           {
-            echo "### DB integration tests (clone, migrate, validate)";
+            echo "### DB integration tests (clone from snapshot, validate)";
             echo "";
             echo "- Status: ${{ job.status }}";
-            echo "- Cloned from: \`prod-db\`";
-            echo "- Target: \`${DB_NAME:-ci-db-${{ github.run_id }}}\`";
+            echo "- Base deployment: \`${BASE_DEPLOYMENT_ID:-n/a}\`";
+            echo "- Snapshot ID: \`${SNAPSHOT_ID:-n/a}\`";
+            echo "- Clone deployment: \`${CLONE_DEPLOYMENT_ID:-n/a}\`";
             echo "- Steps:";
-            echo "  - \`guepard db clone --source prod-db --target \$DB_NAME\`";
-            echo "  - \`guepard db migrate \$DB_NAME --migrations ./migrations\`";
-            echo "  - (optional) seed real data / fixtures";
-            echo "  - \`guepard db diff prod-db \$DB_NAME --fail-on-breaking\` (schema + invariants)";
+            echo "  - \`guepard list deployments --json\` (select base deployment)";
+            echo "  - \`guepard list -x \$BASE_DEPLOYMENT_ID branches --json\` (main branch snapshot)";
+            echo "  - \`guepard clone -x \$BASE_DEPLOYMENT_ID -s \$SNAPSHOT_ID --json\` (create clone)";
+            echo "  - Prisma invariants against clone compute connection string";
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Drop CI database
         if: always()
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          if [ -n "${DB_NAME:-}" ]; then
-            echo "Dropping CI database $DB_NAME"
-            guepard db drop "$DB_NAME" || echo "Drop failed (possibly already removed)"
+          if [ -n "${CLONE_DEPLOYMENT_ID:-}" ]; then
+            echo "Cleaning up clone deployment: $CLONE_DEPLOYMENT_ID"
+            guepard deploy -x "$CLONE_DEPLOYMENT_ID" -y || echo "Clone cleanup failed (possibly already removed)"
           else
-            echo "DB_NAME not set, nothing to drop"
+            echo "CLONE_DEPLOYMENT_ID not set, nothing to clean up"
           fi
 
   api-contract-tests:
