@@ -154,18 +154,40 @@ jobs:
           echo "BASE_DEPLOYMENT_ID=$BASE_DEPLOYMENT_ID" >> "$GITHUB_ENV"
           echo "base_deployment_id=$BASE_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Get snapshot ID from main branch
-        id: snapshot
+      - name: Get main branch ID
+        id: branch
         run: |
           set -e
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           BRANCHES_JSON=$(guepard list -x "$BASE_DEPLOYMENT_ID" branches --json)
           echo "$BRANCHES_JSON" | jq '.' > /tmp/branches.json
-          SNAPSHOT_ID=$(echo "$BRANCHES_JSON" | jq -r '.[] | select(.branch_name == "main") | .snapshot_id' | head -n 1)
-          if [ -z "$SNAPSHOT_ID" ]; then
-            echo "No snapshot_id found for main branch on deployment $BASE_DEPLOYMENT_ID"
+          BRANCH_ID=$(echo "$BRANCHES_JSON" | jq -r '.[] | select(.branch_name == "main") | .id' | head -n 1)
+          if [ -z "$BRANCH_ID" ]; then
+            echo "No main branch found for deployment $BASE_DEPLOYMENT_ID"
             exit 1
           fi
+          echo "BRANCH_ID=$BRANCH_ID" >> "$GITHUB_ENV"
+          echo "branch_id=$BRANCH_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Create snapshot from main branch
+        id: snapshot
+        run: |
+          set -e
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          echo "Creating snapshot from main branch for CI testing..."
+          COMMIT_JSON=$(guepard commit \
+            --message "CI test snapshot - $(date -u +%Y%m%d-%H%M%S)" \
+            --deployment-id "$BASE_DEPLOYMENT_ID" \
+            --branch-id "$BRANCH_ID" \
+            --json || true)
+          echo "$COMMIT_JSON" | jq '.' > /tmp/commit.json || true
+          SNAPSHOT_ID=$(echo "$COMMIT_JSON" | jq -r '.snapshot_id // empty')
+          if [ -z "$SNAPSHOT_ID" ] || [ "$SNAPSHOT_ID" = "null" ]; then
+            echo "Failed to create snapshot. Response:"
+            echo "$COMMIT_JSON" | jq '.' || echo "$COMMIT_JSON"
+            exit 1
+          fi
+          echo "Snapshot created successfully: $SNAPSHOT_ID"
           echo "SNAPSHOT_ID=$SNAPSHOT_ID" >> "$GITHUB_ENV"
           echo "snapshot_id=$SNAPSHOT_ID" >> "$GITHUB_OUTPUT"
 
@@ -287,7 +309,8 @@ jobs:
             echo "- Clone deployment: \`${CLONE_DEPLOYMENT_ID:-n/a}\`";
             echo "- Steps:";
             echo "  - \`guepard list deployments --json\` (select base deployment)";
-            echo "  - \`guepard list -x \$BASE_DEPLOYMENT_ID branches --json\` (main branch snapshot)";
+            echo "  - \`guepard list -x \$BASE_DEPLOYMENT_ID branches --json\` (get main branch ID)";
+            echo "  - \`guepard commit --deployment-id \$BASE_DEPLOYMENT_ID --branch-id \$BRANCH_ID --json\` (create snapshot)";
             echo "  - \`guepard clone -x \$BASE_DEPLOYMENT_ID -s \$SNAPSHOT_ID --json\` (create clone)";
             echo "  - Wait for compute to be healthy";
             echo "  - \`prisma migrate deploy\` (apply migrations to clone)";
