@@ -137,6 +137,12 @@ jobs:
 
       - name: Install jq
         run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          echo "🔍 Executing: guepard usage to test login"
+          echo "$(guepard usage)"
+
+      - name: Install jq
+        run: |
           sudo apt-get update
           sudo apt-get install -y jq
 
