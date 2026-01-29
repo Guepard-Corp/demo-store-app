@@ -27,7 +27,7 @@ model Product {
   imageUrl    String?     @map("image_url")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
-  categoryId  String      @map("category_id") @db.Uuida
+  categoryId  String      @map("category_id") @db.Uuid
   orderItems  OrderItem[]
   category    Category    @relation(fields: [categoryId], references: [id])
   variants    ProductVariant[]
