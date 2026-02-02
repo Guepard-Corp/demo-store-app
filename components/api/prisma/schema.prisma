@@ -33,6 +33,20 @@ model Product {
   ratings     Rating[]
 }
 
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  password  String   @db.VarChar(255)
+  name      String?  @db.VarChar(255)
+  role      String   @default("user") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  orders    Order[]
+  ratings   Rating[]
+
+  @@map("users")
+}
+
 model Order {
   id            String      @id @default(uuid()) @db.Uuid
   clientName    String      @map("client_name")
@@ -43,6 +57,8 @@ model Order {
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
   orderItems    OrderItem[]
+  userId        String?     @map("user_id") @db.Uuid
+  user          User?       @relation(fields: [userId], references: [id])
 }
 
 model OrderItem {
@@ -64,6 +80,8 @@ model Rating {
   guestName String?  @map("guest_name") @db.VarChar(100)
   createdAt DateTime @default(now()) @map("created_at")
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@map("ratings")
 }

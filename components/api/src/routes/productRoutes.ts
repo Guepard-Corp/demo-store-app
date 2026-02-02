@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
+import { authenticate } from '../middleware/authMiddleware';
 
 const router = Router();
 
@@ -64,7 +65,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   try {
     const { name, description, price, stock, imageUrl, categoryId } = req.body;
     const newProduct = await prisma.product.create({
@@ -83,7 +84,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   const { id } = req.params;
   try {
     const { name, description, price, stock, imageUrl, categoryId } = req.body;
@@ -104,7 +105,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.product.delete({

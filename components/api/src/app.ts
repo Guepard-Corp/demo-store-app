@@ -5,6 +5,7 @@ import productRoutes from './routes/productRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import orderRoutes from './routes/orderRoutes';
 import ratingRoutes from './routes/ratingRoutes';
+import authRoutes from './routes/authRoutes';
 
 const app = express();
 
@@ -33,5 +34,6 @@ app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/ratings', ratingRoutes);
+app.use('/api/auth', authRoutes);
 
 export default app;

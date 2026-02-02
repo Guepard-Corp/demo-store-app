@@ -1,6 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import request from "supertest";
 import app from "../app";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_fallback_secret';
+const mockToken = jwt.sign({ userId: 'test-user', email: 'test@example.com', role: 'user' }, JWT_SECRET);
 
 describe("GET /api/products", () => {
   it("returns 200 and array", async () => {
@@ -29,7 +33,8 @@ describe("POST /api/products", () => {
         stock: 5,
         imageUrl: "",
         categoryId: "cat-1",
-      });
+      })
+      .set("Authorization", `Bearer ${mockToken}`);
     expect(res.status).toBe(201);
     expect(res.body.name).toBe("New Product");
     expect(res.body.id).toBeDefined();
@@ -38,7 +43,9 @@ describe("POST /api/products", () => {
 
 describe("DELETE /api/products/:id", () => {
   it("returns 204", async () => {
-    const res = await request(app).delete("/api/products/some-id");
+    const res = await request(app)
+      .delete("/api/products/some-id")
+      .set("Authorization", `Bearer ${mockToken}`);
     expect(res.status).toBe(204);
   });
 });
