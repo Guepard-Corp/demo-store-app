@@ -308,12 +308,12 @@ jobs:
         working-directory: components/api
         run: pnpm install --frozen-lockfile
 
-      - name: Clone shadow deployment from snapshot
+      - name: Clone shadow deployment from snapshot (same as main clone: from main DB + same snapshot)
         id: shadow_clone
         run: |
           set -e
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          echo "🔍 Executing: guepard clone -x $BASE_DEPLOYMENT_ID -s $SNAPSHOT_ID --json (shadow clone for Prisma migrate)"
+          echo "🔍 Executing: guepard clone -x $BASE_DEPLOYMENT_ID -s $SNAPSHOT_ID --json (shadow from main DB, same snapshot as main clone)"
           SHADOW_CLONE_JSON=$(guepard clone -x "$BASE_DEPLOYMENT_ID" -s "$SNAPSHOT_ID" --json)
           echo "$SHADOW_CLONE_JSON" | jq '.' > /tmp/shadow_clone.json
           SHADOW_CLONE_DEPLOYMENT_ID=$(echo "$SHADOW_CLONE_JSON" | jq -r '.deployment.id')
