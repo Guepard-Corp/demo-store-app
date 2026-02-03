@@ -24,6 +24,7 @@ if (isContractMode()) {
     categoryId: mockCategory.id,
     category: mockCategory,
     ratings: [] as { rating: number }[],
+    discountPercentage: null as unknown
   };
 
   mock.module("../lib/prisma", () => ({

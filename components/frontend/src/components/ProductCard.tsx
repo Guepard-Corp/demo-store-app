@@ -70,9 +70,27 @@ export const ProductCard = ({
         </CardHeader>
 
         <CardContent className="mt-auto">
-          <p className="text-2xl font-bold text-primary font-heading">
-            ${product.price.toFixed(2)}
-          </p>
+          <div className="space-y-1">
+            {product.discountPercentage != null && product.discountPercentage > 0 ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg text-muted-foreground line-through">
+                    ${product.price.toFixed(2)}
+                  </span>
+                  <Badge variant="destructive" className="text-xs">
+                    -{product.discountPercentage}%
+                  </Badge>
+                </div>
+                <p className="text-2xl font-bold text-primary font-heading">
+                  ${(product.discountedPrice ?? product.price * (1 - product.discountPercentage / 100)).toFixed(2)}
+                </p>
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-primary font-heading">
+                ${product.price.toFixed(2)}
+              </p>
+            )}
+          </div>
         </CardContent>
 
         <CardFooter className="gap-2">

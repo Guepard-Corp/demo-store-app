@@ -86,6 +86,7 @@ const Admin = () => {
       stock: data.stock!,
       imageUrl: data.image_url!,
       categoryId: data.category_id!,
+      ...(data.discountPercentage !== undefined && { discountPercentage: data.discountPercentage ?? null }),
     };
 
     if (editingProduct) {

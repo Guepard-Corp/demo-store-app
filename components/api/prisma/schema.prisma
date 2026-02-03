@@ -19,12 +19,13 @@ model Category {
 }
 
 model Product {
-  id          String      @id @default(uuid()) @db.Uuid
-  name        String      @db.VarChar(255)
-  description String
-  price       Decimal     @db.Decimal(10, 2)
-  stock       Int         @default(0)
-  imageUrl    String?     @map("image_url")
+  id                 String      @id @default(uuid()) @db.Uuid
+  name               String      @db.VarChar(255)
+  description        String
+  price              Decimal     @db.Decimal(10, 2)
+  discountPercentage Decimal?    @map("discount_percentage") @db.Decimal(5, 2)
+  stock              Int         @default(0)
+  imageUrl           String?     @map("image_url")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
   categoryId  String      @map("category_id") @db.Uuid

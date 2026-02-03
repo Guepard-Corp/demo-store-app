@@ -10,6 +10,7 @@ export type ProductFormData = {
   stock: number;
   imageUrl: string;
   categoryId: string;
+  discountPercentage?: number | null;
 };
 
 type GetProductsParams = {
@@ -47,7 +48,7 @@ export const getProducts = async (params: GetProductsParams = {}): Promise<Produ
   const products: Product[] = await response.json();
   return products.map(product => ({
     ...product,
-    price: parseFloat(product.price as any),
+    price: typeof product.price === 'number' ? product.price : parseFloat(String(product.price)),
   }));
 };
 

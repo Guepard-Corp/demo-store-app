@@ -22,14 +22,17 @@ export const ProductForm = ({ product, categories, onSubmit, onCancel }: Product
     stock: product?.stock?.toString() || "",
     category_id: product?.categoryId || "",
     image_url: product?.imageUrl || "",
+    discount_percentage: product?.discountPercentage != null ? product.discountPercentage.toString() : "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const discountVal = formData.discount_percentage.trim();
     onSubmit({
       ...formData,
       price: parseFloat(formData.price),
       stock: parseInt(formData.stock),
+      discountPercentage: discountVal === "" ? (product ? null : undefined) : parseFloat(discountVal),
     });
   };
 
@@ -90,6 +93,21 @@ export const ProductForm = ({ product, categories, onSubmit, onCancel }: Product
                 required
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="discount_percentage">Discount (%)</Label>
+            <Input
+              id="discount_percentage"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={formData.discount_percentage}
+              onChange={(e) => setFormData({ ...formData, discount_percentage: e.target.value })}
+              placeholder="Leave empty for no discount"
+            />
+            <p className="text-xs text-muted-foreground">Leave empty for no discount</p>
           </div>
 
           <div className="space-y-2">
