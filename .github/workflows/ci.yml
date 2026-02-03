@@ -381,12 +381,7 @@ jobs:
           echo "Applying Prisma migrations to clone database..."
           echo "Using DATABASE_URL: $(echo "$DATABASE_URL" | cut -c1-60)..."
           echo "Using SHADOW_DATABASE_URL: $(echo "$SHADOW_DATABASE_URL" | cut -c1-60)..."
-          bunx prisma migrate diff \
-            --from-empty \
-            --to-schema-datamodel prisma/schema.prisma \
-            --script \
-            --output prisma/migrations/000_baseline/migration.sql
-
+          
           set +e
           bunx prisma migrate resolve --applied 000_baseline 2>&1 | tee /tmp/resolve.out
           RESULT=${PIPESTATUS[0]}
