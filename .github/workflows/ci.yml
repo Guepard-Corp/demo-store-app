@@ -243,8 +243,8 @@ jobs:
           echo "  1. Main clone (target for migrations, seed, invariants)"
           echo "  2. Shadow clone (for Prisma migrate --shadow-database-url)"
           echo ""
-          echo "🔍 Executing: guepard clone -x $BASE_DEPLOYMENT_ID -s $SNAPSHOT_ID --json (clone 1: main)"
-          CLONE_JSON=$(guepard clone -x "$BASE_DEPLOYMENT_ID" -s "$SNAPSHOT_ID" --json)
+          echo "🔍 Executing: guepard clone -x $BASE_DEPLOYMENT_ID -s $SNAPSHOT_ID -n ci-clone-main --json (clone 1: main)"
+          CLONE_JSON=$(guepard clone -x "$BASE_DEPLOYMENT_ID" -s "$SNAPSHOT_ID" -n "ci-clone-main" --json)
           echo "$CLONE_JSON" | jq '.' > /tmp/clone.json
           CLONE_DEPLOYMENT_ID=$(echo "$CLONE_JSON" | jq -r '.deployment.id')
           CONNECTION_STRING=$(echo "$CLONE_JSON" | jq -r '.compute.connection_string // empty')
@@ -260,8 +260,8 @@ jobs:
           echo "clone_deployment_id=$CLONE_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
           echo "Main clone id: $CLONE_DEPLOYMENT_ID"
           echo ""
-          echo "🔍 Executing: guepard clone -x $BASE_DEPLOYMENT_ID -s $SNAPSHOT_ID --json (clone 2: shadow)"
-          SHADOW_CLONE_JSON=$(guepard clone -x "$BASE_DEPLOYMENT_ID" -s "$SNAPSHOT_ID" --json)
+          echo "🔍 Executing: guepard clone -x $BASE_DEPLOYMENT_ID -s $SNAPSHOT_ID -n ci-clone-shadow --json (clone 2: shadow)"
+          SHADOW_CLONE_JSON=$(guepard clone -x "$BASE_DEPLOYMENT_ID" -s "$SNAPSHOT_ID" -n "ci-clone-shadow" --json)
           echo "$SHADOW_CLONE_JSON" | jq '.' > /tmp/shadow_clone.json
           SHADOW_CLONE_DEPLOYMENT_ID=$(echo "$SHADOW_CLONE_JSON" | jq -r '.deployment.id')
           SHADOW_CONNECTION_STRING=$(echo "$SHADOW_CLONE_JSON" | jq -r '.compute.connection_string // empty')
@@ -323,6 +323,12 @@ jobs:
         working-directory: components/api
         run: pnpm install --frozen-lockfile
 
+      - name: Start compute for shadow clone
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          echo "🔍 Executing: guepard compute start -x $SHADOW_CLONE_DEPLOYMENT_ID"
+          guepard compute start -x "$SHADOW_CLONE_DEPLOYMENT_ID" || true
+
       - name: Wait for shadow clone compute to be healthy
         id: shadow_compute_ready
         run: |
@@ -381,7 +387,18 @@ jobs:
             --script \
             --output prisma/migrations/000_baseline/migration.sql
 
-          bunx prisma migrate resolve --applied 000_baseline
+          set +e
+          bunx prisma migrate resolve --applied 000_baseline 2>&1 | tee /tmp/resolve.out
+          RESULT=${PIPESTATUS[0]}
+          set -e
+          if [ "$RESULT" -ne 0 ]; then
+            if grep -q "P3008\|already recorded as applied" /tmp/resolve.out; then
+              echo "000_baseline already applied in clone (expected when clone is from snapshot), continuing..."
+            else
+              cat /tmp/resolve.out
+              exit 1
+            fi
+          fi
 
           bunx prisma migrate diff \
             --from-migrations prisma/migrations \
