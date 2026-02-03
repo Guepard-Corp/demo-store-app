@@ -23,6 +23,7 @@ if (isContractMode()) {
     imageUrl: "https://example.com/headphones.jpg",
     categoryId: mockCategory.id,
     category: mockCategory,
+    ratings: [] as { rating: number }[],
   };
 
   mock.module("../lib/prisma", () => ({
