@@ -303,6 +303,12 @@ jobs:
         working-directory: components/api
         run: pnpm install --frozen-lockfile
 
+      - name: Start compute for base deployment
+        run: |
+          export SHADOW_DATABASE_URL="${{ secrets.SHADOW_DATABASE_URL }}"
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          guepard compute start -x "$SHADOW_DATABASE_URL" || true
+
       - name: Run Prisma migrations against clone
         env:
           DATABASE_URL: ${{ env.DB_CONNECTION_STRING }}
