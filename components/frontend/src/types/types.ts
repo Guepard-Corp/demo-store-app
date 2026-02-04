@@ -29,6 +29,8 @@ export interface Product {
   ratings?: Rating[];
   averageRating?: number;
   totalRatings?: number;
+  discountPercentage?: number;
+  discountedPrice?: number;
 }
 
 export interface Order {

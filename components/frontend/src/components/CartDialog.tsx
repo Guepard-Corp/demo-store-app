@@ -73,7 +73,12 @@ export const CartDialog = ({ isOpen, onOpenChange }: CartDialogProps) => {
                       <img src={item.imageUrl ?? '/placeholder.svg'} alt={item.name} className="w-16 h-16 rounded-md object-cover" />
                       <div className="flex-grow">
                         <p className="font-semibold font-heading">{item.name}</p>
-                        <p className="text-sm text-muted-foreground">${item.price.toFixed(2)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          ${(item.discountedPrice ?? item.price).toFixed(2)}
+                          {item.discountPercentage != null && item.discountPercentage > 0 && (
+                            <span className="ml-1 text-xs">(-{item.discountPercentage}%)</span>
+                          )}
+                        </p>
                       </div>
                       <Input
                         type="number"
